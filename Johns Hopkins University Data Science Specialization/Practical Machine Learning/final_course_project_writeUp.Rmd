@@ -1,0 +1,119 @@
+---
+title: "Practical ML Writeup"
+author: "Robert Haase"
+date: "14 4 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+The trained model had an estimated 99.5% out of sample accuracy and led to a perfect classification of the test set.
+
+## Preprocessing
+
+First, I read in the data as follows.
+
+```{r readin}
+# setting seed for reproducible modeling
+set.seed(1188)
+
+training <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA", "", "#DIV/0!"))
+outOfSample <- read.csv("pml-testing.csv", header = TRUE)
+```
+The **na.strings** parameter helped setting all the _missing_ values to **NA** because many of the features lacked completeness.   
+The next step was to eliminate the variables having more than 90% missing values of some kind. Additionally, I eliminated the first couple of columns, since I assumed and decided that timestamps, names and some window variable would only cause noise in the training data.
+
+```{r subset}
+# delete columns with mostly NAs
+training <- training[,colSums(!is.na(training))/nrow(training) > 0.1]
+# delete timestamps and window variables
+training <- training[, c(8:ncol(training))]
+
+dim(training)
+```
+These measures reduced the feature space from about 159 dimensions to 52 (response variable not included).     
+
+My next step was to look at the response variable distribution.
+
+```{r plot}
+# descriptive analysis of response variable
+barplot(table(training$classe))
+```
+     
+Since the distribution of classes is not highly skewed, I did not explicitly account for this aspect in the following.    
+    
+Having taken the first steps to clean up the training set, I prepared for the modeling step. I loaded the _caret_ package and the _doSNOW_ package to parallize computations. I then used the caret package to continue preprocessing the data.        
+I tried the following:    
+- eliminating any variable with near zero variance    
+- due to the fact of only dealing with numerical features, I used BoxCox transformation as well as centering/scaling to normalize the features, as this "helps" the optimization algorithm to find the local/global optimum during training    
+- used PCA to address linear correlation between the features     
+```{r load, include=FALSE}
+# loading necessary packages
+library(caret)
+#library(doSNOW)
+#cl <- makeCluster(4, outfile="")
+#registerDoSNOW(cl)
+```
+```{r process}
+# further preprocessing - shaping the data for modeling
+
+# The operations are applied in this order: zero-variance filter, 
+# near-zero variance filter, correlation filter, 
+# Box-Cox/Yeo-Johnson/exponential transformation, centering, scaling, 
+# range, imputation, PCA, ICA then spatial sign. 
+#
+# source: https://www.rdocumentation.org/packages/caret/versions/6.0-73/topics/preProcess 
+
+training_ready <- preProcess(training[,-ncol(training)], preProcess = c("nzv", 
+                                                                        "BoxCox", 
+                                                                        "center", 
+                                                                        "scale", 
+                                                                        "pca"), 
+                                                                        thresh = 0.95)
+training_ready
+outOfSample <- predict(training_ready, newdata = outOfSample)
+training_ready <- predict(training_ready, newdata = training)
+```
+The results of this preprocessing step show that only centering and scaling were necessary - no near zero variance variables were not found and there was not enough correlation to perform PCA with a 95% threshold.    
+
+## Training
+
+The following shows my selected parameters and the chosen algorithm.
+
+```{r training}
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 2,
+                     repeats = 1)
+
+# It is commented out to avoid the training from running while compiling the document
+
+# xgBoost <- train(classe~., 
+#                 data=training_ready, 
+#                 method="xgbTree",
+#                 metric = "Kappa",
+#                 tuneLength = 10,
+#                 trControl = ctrl)
+```
+I chose to perform 2-fold-cross validation. I only chose 2, since the data set had many samples and therefore it should be enough for getting decent out of sample performance indicators.    
+I chose the Extreme Gradient Boosting algorithm, since it has to me the reputation of being one of the best off-the-shelf algorithms for classification as well as regression. The results are oftentimes comparably good while being computationally fast. I discovered it on the Kaggle Data Science Competition Platform. Moreover, it has the advantage of integrating the ensembling approach.   
+For parameter tuning, I simply indicated that caret should automatically try 10 different values for each tuning parameter.    
+For the metric, I chose **Kappa**, since it is preferably used for imbalanced class distributions with respect to the response variable, as opposed to **Accuracy**.   
+
+    
+This first shot at the training problem was already very successful and needed no further tuning. The average expected cross-validated accuracy was already 0.9958720 (I now speak of Accuracy, since it is more inuitive to understand - at least for me). The following shows the corresponding parameter values.
+
+```{r results}
+# parameters: 
+#     eta max_depth gamma colsample_bytree min_child_weight subsample nrounds  
+#1680 0.3         9     0              0.6                1 0.8888889     500 
+
+#      Accuracy     Kappa   AccuracySD      KappaSD
+#     0.9958720 0.9947787 0.0010810928 0.001367374
+```
+Applying the model to the 20 test samples yielded => 100% Accuracy
+
