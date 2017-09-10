@@ -1,4 +1,4 @@
-# Johns Hopkins Data Science Captstone Project @ Coursera
+# Johns Hopkins Data Science Capstone Project
 Data Science Specialization Captone Project
 
 The following links guide you to and through the **NLP prediction tool**, I built as part of the capstone project.
