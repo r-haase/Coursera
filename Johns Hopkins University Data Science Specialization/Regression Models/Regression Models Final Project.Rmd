@@ -1,0 +1,90 @@
+---
+title: "Regression Models Final Project"
+author: "Robert Haase"
+date: "29 1 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+A manual transmission seems to be better for gas mileage. Only regressing _mpg_ on _am_ shows an average increase of approx. 7mpg switching from automatic to manual transmission. This effect is lowered to about 2mpg when adding additional independent variables like displacement. Adding addtional well-selected variable to the regression proved to be statistically significant and increased the R-squared value by 50%.
+
+## Detailed Description of the Analysis
+
+```{r preparation, echo=FALSE, include=FALSE}
+data("mtcars")
+
+head(mtcars)
+
+?mtcars
+
+mtcars$am <- as.factor(mtcars$am)
+mtcars$cyl <- as.factor(mtcars$cyl)
+
+library(plyr)
+mtcars$am <- revalue(mtcars$am, c("0"="automatic", "1"="manual"))
+
+library(sm)
+```
+
+First, I took a look at the distribution of mpg differentiated by the _am_ variable (manual or automatic transmission). The first two plots in the Appendix section clearly show that cars with manual transmission have a higher gas mileage than cars with automatic transmission. 
+
+```{r summary_medians, echo=FALSE}
+tapply(mtcars$mpg, mtcars$am, summary)
+```
+
+The summary table shows that the _median mpg_ for manual cars is 22.8 and for automatic cars only 17.3.      
+With this insight, the second step of my analysis was to perform a simple linear regression with **mpg** as the dependent variable and **am** as the only independent variable. The model summary follows next.
+
+```{r fit1_reg, echo=FALSE}
+fit1 <- lm(mpg~am,mtcars)
+summary(fit1)
+#cat("R-Squared: ") 
+#summary(fit1)$r.squared
+```
+The the beta0 coef of the intercept corresponds to the mean mpg of all cars with automatic transmission, which is the same value that was shown in the previous summary table. The **ammanual** coef needs to be interpreted as the estimated increase in mpg of a car when that car were to switch from automatic to a manual transmission. The sum of beta0 and beta1 equal to the average mpg of all manual transmission cars, as seen in the boxplot or summary table.
+Both coefs are highly statistically significant, as indicated by the three ***. 
+The R-Squared value equals 0.3598, which can be interpreted as the percentage of how well the linear model describes the variance we see in the **mpg** variable.
+
+We can try to increase the R-Squared value by adding more of the available variables to the regression. Of the remaining 9 variables, I excluded **qsec**, since it is not a direct measure or property of a car. I also excluded **V/S** and **drat** because I did not understand what they mean after checking the code book. 
+For the remaining variables. I performed a pairwaise scatterplot (3rd plot in the appendix) to check whether the variables are correlated or not (the pdf does unfortunately squishes the figure).      
+
+The scatterplot shows that shows clear linear correlations for all independent variables with **mpg**, except for gear. Also we can see that **cyl, disp, hp** are highly correlated among each other, which makes total sense even if you know as little about cars as I do. Therefore, I will exclude **gear** from further analysis. The second regression will be extended, compared to the first one, with the variables **wt, carb, and disp**. The latter is added as a "proxy" for the group of the three highly correlated variables **disp, hp, and cyl**. The results follow:
+```{r fit2_reg, echo=FALSE}
+fit2 <- lm(mpg~am+wt+disp+carb,mtcars)
+summary(fit2)$coef
+anova(fit1,fit2)
+```
+The results give us multiple insights: Surprisingly, wt is not significant at any of the significance levels, whereas common sense would say that a heavy car has a lower mpg than a light car. The remaining independent variables are significant. Looking at the coefficient of **ammanual**, we can see that the estimated effect reduces from a approx. 7mpg increase to an only approx. 2mpg increase, when comparing two cars with different transmission, the rest being equal (accounting for other factors like disp). **Disp** has a negative influence on mpg. If you increase **disp** by 1 cu.in., the mpg decreases by 0.017, ceteris paribus. The number of carburators has a negative effect, also. If the **carb** is increased by 1, the mpg decreases by 1.61, ceteris paribus.   
+Adding these additional indepenendent variables also boosted the R-Squared value from 0.3598 to 0.8368. That means we increased the degree of model-explained mpg variance by approx. 50%.  
+Performing an ANOVA (analysis of variance) confirms the R-Squared boost by telling us that the addition of these independent variables caused a significant improvement at the *** level.   
+Finally looking at the residual plot, there is no systematic pattern to be seen, which is concluded from the random distribution of these residuals in the plot. Therefore, it seems as if we do not lack a systematic regressor in our model.
+
+## Appendix - Plots
+
+
+```{r plots, echo=FALSE}
+sm.density.compare(mtcars$mpg, mtcars$am, xlab="Miles Per Gallon")
+title(main="MPG Distribution by transmission type")
+#colfill<-c(2:(2+length(levels(am)))) 
+legend("topright", levels(mtcars$am), fill=c("red", "green"))
+
+#boxplot
+boxplot(mpg~am,data=mtcars, main="Car Milage Data by Transmission", xlab="Transmission Type", ylab="Miles Per Gallon")
+
+#scatterplot
+pairs(mpg~cyl+disp+hp+gear+carb+wt,data=mtcars, main="Scatterplot Matrix")
+```     
+|     
+|     
+|      
+|     
+```{r plots2, echo=FALSE}
+# fit2 resid plot
+plot(fitted(fit2), residuals(fit2),xlab = "Fitted Values", ylab = "Residuals")
+abline(h=0, lty=2)
+```
+
